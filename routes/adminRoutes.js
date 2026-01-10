@@ -6,7 +6,6 @@ const { verifyToken } = require('../middleware/authMiddleware');
 const adminTransactionController = require('../controllers/adminTransactionController'); 
 
 // Áp dụng bảo mật cho tất cả API admin
-// Middleware này đảm bảo chỉ Admin có Token hợp lệ mới gọi được các API bên dưới
 router.use(verifyToken);
 
 // --- CÁC ROUTE THỐNG KÊ ---
@@ -19,10 +18,8 @@ router.get('/trips', adminController.getAllTrips);
 // --- QUẢN LÝ TÀI XẾ ---
 router.get('/drivers', adminController.getAllDrivers);
 
-// 👇 admin huỷ vé huỷ chuyến tài xế và khách 
-router.post('/trips/:id/cancel', adminController.cancelTripByAdmin);       // Admin hủy chuyến
-router.post('/bookings/:id/cancel', adminController.cancelBookingByAdmin); // Admin hủy vé
-
+// 👇 [MỚI THÊM] Route xóa tài xế (Để fix lỗi 404 khi bấm nút Xóa)
+router.delete('/drivers/:id', adminController.deleteDriver); 
 
 // Route xử lý trạng thái: 'approve' (duyệt) hoặc 'block' (khóa)
 router.post('/drivers/:id/:action', adminController.updateDriverStatus);
@@ -30,18 +27,22 @@ router.post('/drivers/:id/:action', adminController.updateDriverStatus);
 // Route cập nhật sữa Full thông tin tài xế (Cá nhân + Xe)
 router.put('/drivers/:id', adminController.updateDriver);
 
+
+// --- QUẢN LÝ VÉ & CHUYẾN ĐI (Hủy vé/chuyến) ---
+router.post('/trips/:id/cancel', adminController.cancelTripByAdmin);       
+router.post('/bookings/:id/cancel', adminController.cancelBookingByAdmin); 
+
+
 // --- QUẢN LÝ KHÁCH HÀNG ---
 router.get('/passengers', adminController.getAllPassengers);
-router.post('/passengers/:id/lock', adminController.lockPassenger); // Khoá khách hàng
+router.post('/passengers/:id/lock', adminController.lockPassenger); 
 
 // --- CÔNG CỤ KHÁC ---
 router.post('/reset-password', adminController.forceResetPassword);
 
-// 1. Lấy danh sách giao dịch
+// --- QUẢN LÝ GIAO DỊCH ---
 router.get('/transactions', adminTransactionController.getTransactions);
-// 2. Duyệt giao dịch
 router.post('/transactions/:id/approve', adminTransactionController.approveTransaction);
-// 3. Từ chối giao dịch
 router.post('/transactions/:id/reject', adminTransactionController.rejectTransaction);
 
 module.exports = router;

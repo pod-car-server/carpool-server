@@ -584,3 +584,40 @@ exports.handleTransaction = async (req, res) => {
         client.release();
     }
 };
+
+// ... (Giữ nguyên các hàm bên trên)
+
+// 👇 16. THÊM HÀM XÓA TÀI XẾ VÀO ĐÂY
+exports.deleteDriver = async (req, res) => {
+    const { id } = req.params;
+    try {
+        // A. Kiểm tra xem tài xế có đang chạy chuyến nào không?
+        const tripCheck = await pool.query(
+            "SELECT id FROM trips WHERE driver_id = $1 AND status IN ('scheduled', 'ongoing')",
+            [id]
+        );
+        
+        if (tripCheck.rows.length > 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: "Không thể xóa: Tài xế này đang có chuyến đi chưa hoàn thành!" 
+            });
+        }
+
+        // B. Thực hiện xóa (Database đã có ON DELETE CASCADE nên xe sẽ tự mất theo)
+        const result = await pool.query(
+            "DELETE FROM users WHERE id = $1 AND role = 'driver' RETURNING id", 
+            [id]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ success: false, message: "Không tìm thấy tài xế." });
+        }
+
+        res.json({ success: true, message: "Đã xóa tài xế thành công." });
+
+    } catch (err) {
+        console.error("Lỗi xóa tài xế:", err);
+        res.status(500).json({ success: false, message: "Lỗi Server khi xóa tài xế." });
+    }
+};
