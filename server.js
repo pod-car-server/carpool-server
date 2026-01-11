@@ -30,9 +30,11 @@ const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "*",
-        methods: ["GET", "POST", "PUT", "DELETE"]
-    }
+        origin: "*", // Cho phép mọi domain kết nối
+        methods: ["GET", "POST", "PUT", "DELETE"],
+        credentials: true
+    },
+    transports: ['websocket', 'polling'] // ✅ Hỗ trợ cả hai để tránh lỗi connection established
 });
 
 app.set('io', io); 
@@ -40,7 +42,7 @@ app.set('io', io);
 // --- MIDDLEWARE CHUNG ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors()); // Cho phép Web Admin truy cập tài nguyên (bao gồm ảnh) từ domain khác
+app.use(cors()); // ✅ Cần thiết cho các yêu cầu API thông thường
 app.use(morgan('dev'));
 
 app.use((req, res, next) => {
@@ -48,16 +50,18 @@ app.use((req, res, next) => {
     next();
 });
 
-// --- CẤU HÌNH THƯ MỤC UPLOADS (ĐÃ SỬA LỖI HIỂN THỊ) ---
+// --- CẤU HÌNH THƯ MỤC UPLOADS (FIX LỖI HIỂN THỊ ẢNH) ---
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)){
-    fs.mkdirSync(uploadDir);
+    fs.mkdirSync(uploadDir, { recursive: true }); // ✅ Thêm recursive để an toàn hơn
 }
 
-// Cấu hình static với Header bổ sung để tránh lỗi cache hoặc chặn ảnh trên mobile
+// ✅ CẤU HÌNH STATIC CHUẨN ĐỂ ADMIN XEM ĐƯỢC ẢNH
 app.use('/uploads', express.static(uploadDir, {
     setHeaders: (res, path, stat) => {
-        res.set('Access-Control-Allow-Origin', '*'); // Ép buộc cho phép mọi nơi lấy ảnh
+        res.set('Access-Control-Allow-Origin', '*'); // Cho phép Web Admin lấy ảnh
+        res.set('Cross-Origin-Resource-Policy', 'cross-origin'); // Tránh lỗi chặn ảnh do bảo mật trình duyệt
+        res.set('Cache-Control', 'public, max-age=31536000'); // Cache ảnh để load nhanh
     }
 }));
 
@@ -71,7 +75,7 @@ io.on("connection", (socket) => {
     socket.on("join_driver_room", (driverId) => {
         const roomName = `driver_${driverId}`;
         socket.join(roomName);
-        console.log(`🚕 Tài xế ID ${driverId} đã vào phòng riêng: ${roomName}`);
+        console.log(`| Tài xế ID ${driverId} đã vào phòng riêng: ${roomName}`);
     });
 
     socket.on("join_user_room", (userId) => {
@@ -83,14 +87,13 @@ io.on("connection", (socket) => {
         if (!tripId) return;
         const roomName = `trip_${String(tripId)}`; 
         socket.join(roomName);
-        console.log(`🗺️ Socket ${socket.id} vào phòng chuyến đi: ${roomName}`);
     });
 
     socket.on("join_admin_room", () => {
         socket.join("admin_room");
         const driversList = Array.from(activeDrivers.values());
         socket.emit("initial_active_drivers", driversList);
-        console.log("👮 Admin đã vào phòng giám sát (admin_room).");
+        console.log("👮 Admin đã vào phòng giám sát.");
     });
 
     socket.on("send_location", (data) => {
