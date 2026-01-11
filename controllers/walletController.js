@@ -35,15 +35,16 @@ exports.deposit = async (req, res) => {
         const userId = req.user.id;
         const { amount } = req.body;
         
-        // ✅ SỬA LỖI HIỂN THỊ ẢNH: Đảm bảo đường dẫn bắt đầu bằng /uploads/
         let proofImage = req.file ? req.file.path.replace(/\\/g, "/") : null;
-        if (proofImage && !proofImage.startsWith('/')) {
-            proofImage = '/' + proofImage;
+        uploads"
+        if (proofImage && proofImage.startsWith('/')) {
+            proofImage = proofImage.substring(1);
         }
 
         if (!amount || parseInt(amount) < 10000) {
             return res.status(400).json({ success: false, message: "Số tiền tối thiểu 10.000đ" });
         }
+        
         if (!proofImage) {
             return res.status(400).json({ success: false, message: "Thiếu ảnh minh chứng" });
         }

@@ -12,12 +12,12 @@ exports.getAllPassengers = async (req, res) => {
     }
 };
 
-// 2. LẤY DANH SÁCH TÀI XẾ
+// 2. LẤY DANH SÁCH TÀI XẾ (ĐÃ TỐI ƯU SQL)
 exports.getAllDrivers = async (req, res) => {
     try {
         const query = `
             SELECT u.id, u.full_name, u.phone_number, u.email, u.created_at, u.avatar_url,
-                   v.plate_number, v.car_type, v.seats, v.color, v.status,
+                   v.plate_number, v.car_type, v.seats, v.color, v.status as vehicle_status,
                    v.license_image_url, v.registration_image_url,
                    u.commission_rate
             FROM users u
@@ -119,7 +119,7 @@ exports.getDriverRevenueStats = async (req, res) => {
     }
 };
 
-// 7. CẬP NHẬT FULL QUYỀN TÀI XẾ
+// 7. CẬP NHẬT FULL QUYỀN TÀI XẾ (ĐÃ FIX ĐƯỜNG DẪN ẢNH)
 exports.updateDriver = async (req, res) => {
     const { id } = req.params; 
     const { 
@@ -129,13 +129,20 @@ exports.updateDriver = async (req, res) => {
         commission_rate 
     } = req.body; 
 
+    // Hàm dọn dẹp đường dẫn ảnh để tránh lỗi //uploads
+    const cleanPath = (path) => {
+        if (!path) return "";
+        let p = path.replace(/\\/g, "/");
+        return p.startsWith('/') ? p.substring(1) : p;
+    };
+
     const safePlateNumber = plate_number || "Chưa cập nhật"; 
     const safeVehicleType = vehicle_type || "Chưa rõ";
     const safeColor = color || "Chưa rõ"; 
     const safeSeats = seats ? parseInt(seats) : 4; 
-    const safeAvatar = avatar_url || "";
-    const safeLicense = license_image_url || "";
-    const safeRegImage = vehicle_registration_image_url || "";
+    const safeAvatar = cleanPath(avatar_url);
+    const safeLicense = cleanPath(license_image_url);
+    const safeRegImage = cleanPath(vehicle_registration_image_url);
     const safeCommission = commission_rate ? parseInt(commission_rate) : 10;
 
     try {
@@ -278,7 +285,7 @@ exports.getDriverRevenueDetail = async (req, res) => {
         const queryYear = year || new Date().getFullYear();
 
         const driverQuery = `
-            SELECT u.id, u.full_name, u.avatar_url, u.phone_number, v.plate_number, v.car_type 
+            SELECT u.id, u.full_name, u.avatar_url, u.phone_number, v.plate_number, v.car_type, v.registration_image_url 
             FROM users u
             LEFT JOIN vehicles v ON u.id = v.driver_id
             WHERE u.id = $1
@@ -346,12 +353,11 @@ exports.getAllTrips = async (req, res) => {
     }
 };
 
-// 12. ADMIN HỦY CHUYẾN ĐI (ĐÃ SỬA: THÔNG BÁO CHO TÀI XẾ)
+// 12. ADMIN HỦY CHUYẾN ĐI
 exports.cancelTripByAdmin = async (req, res) => {
     const { id } = req.params; 
     console.log(`❌ Admin đang hủy chuyến: ${id}`);
     try {
-        // Lấy driver_id để bắn socket riêng cho tài xế
         const tripInfo = await pool.query("SELECT driver_id FROM trips WHERE id = $1", [id]);
         if (tripInfo.rows.length === 0) return res.status(404).json({ success: false, message: "Không tìm thấy chuyến" });
         const driverId = tripInfo.rows[0].driver_id;
@@ -361,15 +367,11 @@ exports.cancelTripByAdmin = async (req, res) => {
 
         if (req.io) {
             req.io.emit("server_update_trips", { message: `Chuyến ${id} đã bị hủy` });
-
-            // Thông báo cho hành khách trong phòng trip
             req.io.to(`trip_${id}`).emit("booking_update", { 
                 status: 'cancelled', 
                 notification_type: 'admin_cancel_trip', 
                 message: "⚠️ THÔNG BÁO: Admin đã hủy chuyến đi này!" 
             });
-
-            // ✅ QUAN TRỌNG: Bắn cho tài xế để "đá" ra màn hình chính
             req.io.to(`driver_${driverId}`).emit("booking_update", { 
                 status: 'cancelled', 
                 notification_type: 'admin_cancel_trip', 
@@ -410,7 +412,7 @@ exports.cancelBookingByAdmin = async (req, res) => {
     }
 };
 
-// 14. LẤY DANH SÁCH GIAO DỊCH (GIỮ NGUYÊN)
+// 14. LẤY DANH SÁCH GIAO DỊCH
 exports.getAllTransactions = async (req, res) => {
     try {
         const query = `
@@ -428,7 +430,7 @@ exports.getAllTransactions = async (req, res) => {
     }
 };
 
-// 15. XỬ LÝ DUYỆT / TỪ CHỐI GIAO DỊCH (GIỮ NGUYÊN)
+// 15. XỬ LÝ DUYỆT / TỪ CHỐI GIAO DỊCH
 exports.handleTransaction = async (req, res) => {
     const client = await pool.connect();
     try {
@@ -466,7 +468,7 @@ exports.handleTransaction = async (req, res) => {
     }
 };
 
-// 16. THÊM HÀM XÓA TÀI XẾ
+// 16. XÓA TÀI XẾ
 exports.deleteDriver = async (req, res) => {
     const { id } = req.params;
     try {
