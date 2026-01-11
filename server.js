@@ -18,7 +18,6 @@ const vehicleRoutes = require('./routes/vehicleRoutes');
 const profileRoutes = require('./routes/profileRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
-// 👇 ROUTE ADMIN & VÍ
 const adminRoutes = require('./routes/adminRoutes');
 const walletRoutes = require('./routes/walletRoutes');
 
@@ -36,50 +35,50 @@ const io = new Server(server, {
     }
 });
 
-// Lưu biến io vào app (để dùng kiểu req.app.get('io') nếu cần)
 app.set('io', io); 
 
 // --- MIDDLEWARE CHUNG ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors());
+app.use(cors()); // Cho phép Web Admin truy cập tài nguyên (bao gồm ảnh) từ domain khác
 app.use(morgan('dev'));
 
-// 👇👇👇 QUAN TRỌNG: GÁN SOCKET VÀO REQUEST (REQ) 👇👇👇
 app.use((req, res, next) => {
     req.io = io; 
     next();
 });
-// 👆👆👆 
 
-// Cấu hình thư mục Uploads
+// --- CẤU HÌNH THƯ MỤC UPLOADS (ĐÃ SỬA LỖI HIỂN THỊ) ---
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)){
     fs.mkdirSync(uploadDir);
 }
-app.use('/uploads', express.static(uploadDir));
 
-// Biến lưu trữ tạm thời các tài xế online (Trong RAM)
+// Cấu hình static với Header bổ sung để tránh lỗi cache hoặc chặn ảnh trên mobile
+app.use('/uploads', express.static(uploadDir, {
+    setHeaders: (res, path, stat) => {
+        res.set('Access-Control-Allow-Origin', '*'); // Ép buộc cho phép mọi nơi lấy ảnh
+    }
+}));
+
+// Biến lưu trữ tạm thời các tài xế online
 const activeDrivers = new Map();
 
 // --- SOCKET LOGIC ---
 io.on("connection", (socket) => {
     console.log("⚡ Client Socket kết nối ID:", socket.id);
 
-    // 1. Tài xế vào phòng
     socket.on("join_driver_room", (driverId) => {
         const roomName = `driver_${driverId}`;
         socket.join(roomName);
         console.log(`🚕 Tài xế ID ${driverId} đã vào phòng riêng: ${roomName}`);
     });
 
-    // 2. User vào phòng
     socket.on("join_user_room", (userId) => {
         const roomName = `user_${userId}`;
         socket.join(roomName);
     });
 
-    // 3. Vào phòng chuyến đi
     socket.on("join_trip_room", (tripId) => {
         if (!tripId) return;
         const roomName = `trip_${String(tripId)}`; 
@@ -87,49 +86,37 @@ io.on("connection", (socket) => {
         console.log(`🗺️ Socket ${socket.id} vào phòng chuyến đi: ${roomName}`);
     });
 
-    // 4. Admin vào phòng giám sát
     socket.on("join_admin_room", () => {
         socket.join("admin_room");
-        
-        // Gửi ngay danh sách tài xế online cho Admin
         const driversList = Array.from(activeDrivers.values());
         socket.emit("initial_active_drivers", driversList);
         console.log("👮 Admin đã vào phòng giám sát (admin_room).");
     });
 
-    // 5. Nhận vị trí từ TÀI XẾ -> Gửi cho Admin & Khách
     socket.on("send_location", (data) => {
         const driverId = data.user_id || socket.id;
-
-        // Lưu vào RAM
         activeDrivers.set(driverId, {
             ...data,
             id: driverId,
             socket_id: socket.id,
             last_update: new Date()
         });
-
-        // Gửi cho Admin (Live Map)
         io.to("admin_room").emit("update_driver_location", {
             id: driverId,
             ...data
         });
-
-        // Gửi cho Khách (trong chuyến đi)
         if (data.trip_id) {
             const roomName = `trip_${String(data.trip_id)}`; 
             io.to(roomName).emit("receive_location", data);
         }
     });
 
-        // Nhận từ Khách -> Gửi cho Tài xế
     socket.on("send_passenger_location", (data) => {
         if (!data.trip_id) return;
         const roomName = `trip_${String(data.trip_id)}`;
         io.to(roomName).emit("receive_passenger_location", data);
     });
 
-    // 7. Ngắt kết nối
     socket.on("disconnect", () => {
         for (let [id, driver] of activeDrivers.entries()) {
             if (driver.socket_id === socket.id) {
@@ -149,10 +136,8 @@ app.use('/api/trips', tripRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/profile', profileRoutes);
-app.use('/api/reviews', reviewRoutes);
+app.use('/api/review', reviewRoutes);
 app.use('/api/notifications', notificationRoutes);
-
-// Routes Admin & Ví
 app.use('/api/admin', adminRoutes);
 app.use('/api/wallet', walletRoutes); 
 
@@ -162,7 +147,6 @@ app.use((err, req, res, next) => {
     res.status(500).json({ success: false, message: 'Lỗi Server' });
 });
 
-// Hàm lấy IP mạng LAN
 const getLocalIpAddress = () => {
     const interfaces = os.networkInterfaces();
     for (const name of Object.keys(interfaces)) {
@@ -173,7 +157,6 @@ const getLocalIpAddress = () => {
     return 'localhost';
 };
 
-// Khởi động Server
 pool.connect().then(() => {
     console.log('✅ DB Connected');
     server.listen(PORT, '0.0.0.0', () => {
