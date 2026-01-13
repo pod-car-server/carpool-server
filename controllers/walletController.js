@@ -36,7 +36,7 @@ exports.deposit = async (req, res) => {
         const { amount } = req.body;
         
         let proofImage = req.file ? req.file.path.replace(/\\/g, "/") : null;
-        uploads"
+        
         if (proofImage && proofImage.startsWith('/')) {
             proofImage = proofImage.substring(1);
         }
