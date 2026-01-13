@@ -41,10 +41,16 @@ exports.register = async (req, res) => {
             ? `/uploads/${req.files['vehicle_registration'][0].filename}` 
             : null;
 
+        // 👇 ĐÃ SỬA: Thêm status = 'pending' cho driver
+        let initialStatus = 'active'; // Mặc định cho passenger
+        if (role === 'driver') {
+            initialStatus = 'pending'; // Driver phải chờ duyệt
+        }
+
         const userRes = await client.query(
-            `INSERT INTO users (full_name, email, password, phone_number, role, avatar_url, updated_at) 
-             VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
-            [full_name, email, hash, phone_number, role, avatarUrl]
+            `INSERT INTO users (full_name, email, password, phone_number, role, avatar_url, status, updated_at) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
+            [full_name, email, hash, phone_number, role, avatarUrl, initialStatus]
         );
         const user = userRes.rows[0];
 
@@ -77,17 +83,13 @@ exports.register = async (req, res) => {
 };
 
 // --- 2. ĐĂNG NHẬP ---
-
 exports.login = async (req, res) => {
     try {
-        console.log("1️⃣ SERVER NHẬN LOGIN:", req.body); // 👈 Log quan trọng để debug
+        console.log("1️⃣ SERVER NHẬN LOGIN:", req.body); 
 
         const { email, phone_number, password } = req.body;
-
-        // Logic: App có thể gửi 'email' hoặc 'phone_number'. Ta gộp chung là loginInput
         const loginInput = email || phone_number;
 
-        // 👇 KIỂM TRA ĐẦU VÀO (Nếu thiếu dòng này hoặc biến sai -> Lỗi 400)
         if (!loginInput || !password) {
             console.log("❌ Lỗi: Thiếu SĐT hoặc Password!");
             return res.status(400).json({ 
@@ -98,7 +100,6 @@ exports.login = async (req, res) => {
 
         const client = await pool.connect();
         try {
-            // Tìm user trong Database
             const query = "SELECT * FROM users WHERE email = $1 OR phone_number = $1";
             const result = await client.query(query, [loginInput]);
             const user = result.rows[0];
@@ -107,8 +108,15 @@ exports.login = async (req, res) => {
                 return res.status(401).json({ success: false, message: "Tài khoản không tồn tại." });
             }
 
+            // 👇 KIỂM TRA TRẠNG THÁI TÀI KHOẢN KHI ĐĂNG NHẬP
             if (user.status === 'blocked') {
-                return res.status(403).json({ success: false, message: "Tài khoản bị KHÓA." });
+                return res.status(403).json({ success: false, message: "Tài khoản đã bị KHÓA." });
+            }
+            if (user.status === 'pending' && user.role === 'driver') {
+                // Tùy chọn: Có cho phép login khi chưa duyệt không? 
+                // Thông thường vẫn cho login nhưng hạn chế quyền.
+                // Nếu muốn chặn luôn thì bỏ comment dòng dưới:
+                // return res.status(403).json({ success: false, message: "Tài khoản đang chờ duyệt." });
             }
 
             const isMatch = await bcrypt.compare(password, user.password);
@@ -116,7 +124,6 @@ exports.login = async (req, res) => {
                 return res.status(401).json({ success: false, message: "Mật khẩu không đúng." });
             }
 
-            // 👇 LẤY BIỂN SỐ XE (QUAN TRỌNG)
             let finalPlate = null;
             if (user.role === 'driver') {
                 const vRes = await client.query("SELECT plate_number FROM vehicles WHERE driver_id = $1", [user.id]);
@@ -127,10 +134,8 @@ exports.login = async (req, res) => {
 
             console.log("✅ LOGIN THÀNH CÔNG - Biển số:", finalPlate);
 
-            // Tạo token
             const token = generateToken(user.id, user.role);
 
-            // Trả về kết quả
             res.json({
                 success: true,
                 message: "Đăng nhập thành công!",
@@ -142,7 +147,8 @@ exports.login = async (req, res) => {
                     phone_number: user.phone_number,
                     role: user.role,
                     avatar_url: user.avatar_url,
-                    plate_number: finalPlate // 👈 Biển số được gửi về đây
+                    plate_number: finalPlate,
+                    status: user.status // Trả về status để App biết
                 }
             });
 
@@ -156,19 +162,17 @@ exports.login = async (req, res) => {
     }
 };
 
-// --- 3. LẤY THÔNG TIN CÁ NHÂN (ĐÃ SỬA LỖI QUERY) ---
+// --- 3. LẤY THÔNG TIN CÁ NHÂN ---
 exports.getMe = async (req, res) => {
     try {
-        // 👇 Câu lệnh chuẩn lấy cả thông tin User và Xe (biển số)
         const query = `
-            SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.avatar_url, u.updated_at,
+            SELECT u.id, u.full_name, u.email, u.phone_number, u.role, u.avatar_url, u.updated_at, u.status,
                    v.plate_number, v.car_type 
             FROM users u
             LEFT JOIN vehicles v ON u.id = v.driver_id
             WHERE u.id = $1
         `;
         
-        // 👇 ĐÃ SỬA: Truyền biến query vào đây (thay vì chuỗi string cứng như cũ)
         const result = await pool.query(query, [req.user.id]);
 
         if (result.rows.length === 0) return res.status(404).json({ success: false, message: "User not found" });
@@ -191,7 +195,6 @@ exports.updateProfile = async (req, res) => {
         
         const user = userCheck.rows[0];
 
-        // Logic chặn cập nhật 3 tháng/lần
         if (user.updated_at) {
             const lastUpdate = new Date(user.updated_at);
             const now = new Date();
