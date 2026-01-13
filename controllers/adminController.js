@@ -12,11 +12,12 @@ exports.getAllPassengers = async (req, res) => {
     }
 };
 
-// 2. LẤY DANH SÁCH TÀI XẾ (ĐÃ TỐI ƯU SQL)
+// 2. LẤY DANH SÁCH TÀI XẾ (ĐÃ FIX: THÊM u.status)
 exports.getAllDrivers = async (req, res) => {
     try {
         const query = `
             SELECT u.id, u.full_name, u.phone_number, u.email, u.created_at, u.avatar_url,
+                   u.status,   -- <--- QUAN TRỌNG: Thêm dòng này vào!
                    v.plate_number, v.car_type, v.seats, v.color, v.status as vehicle_status,
                    v.license_image_url, v.registration_image_url,
                    u.commission_rate
