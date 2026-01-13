@@ -59,7 +59,7 @@ exports.forceResetPassword = async (req, res) => {
     }
 };
 
-// 4. XỬ LÝ DUYỆT / KHÓA TÀI XẾ (ĐÃ SỬA: Cập nhật bảng USERS)
+// 4. XỬ LÝ DUYỆT / KHÓA TÀI XẾ (Bản Fix: Đồng bộ cả User và Vehicle)
 exports.updateDriverStatus = async (req, res) => {
     const { id, action } = req.params; 
     try {
@@ -76,7 +76,7 @@ exports.updateDriverStatus = async (req, res) => {
             return res.status(400).json({ success: false, message: "Hành động không hợp lệ" });
         }
 
-        // 👇 SỬA TẠI ĐÂY: Update bảng 'users' thay vì 'vehicles'
+        // 1. Cập nhật bảng USERS
         const result = await pool.query(
             "UPDATE users SET status = $1 WHERE id = $2 RETURNING *",
             [status, id]
@@ -86,8 +86,8 @@ exports.updateDriverStatus = async (req, res) => {
             return res.status(404).json({ success: false, message: "Không tìm thấy tài xế này" });
         }
 
-        // (Tùy chọn) Nếu muốn khóa luôn cả xe thì bỏ comment dòng dưới:
-        // await pool.query("UPDATE vehicles SET status = $1 WHERE driver_id = $2", [status, id]);
+        // 👇 2. CẬP NHẬT LUÔN BẢNG VEHICLES (Bỏ comment dòng này để xe cũng được duyệt)
+        await pool.query("UPDATE vehicles SET status = $1 WHERE driver_id = $2", [status, id]);
 
         res.json({ success: true, message: messageText, status: status });
     } catch (err) {
