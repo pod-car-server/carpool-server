@@ -31,15 +31,19 @@ exports.register = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hash = await bcrypt.hash(password, salt);
 
+        // 👇 CODE MỚI CHO CLOUDINARY: Lấy .path thay vì tự ghép chuỗi /uploads/...
         const avatarUrl = (req.files && req.files['avatar'] && req.files['avatar'][0]) 
-            ? `/uploads/${req.files['avatar'][0].filename}` 
+            ? req.files['avatar'][0].path 
             : null;
+            
         const licenseUrl = (req.files && req.files['license'] && req.files['license'][0]) 
-            ? `/uploads/${req.files['license'][0].filename}` 
+            ? req.files['license'][0].path 
             : null;
+            
         const registrationUrl = (req.files && req.files['vehicle_registration'] && req.files['vehicle_registration'][0]) 
-            ? `/uploads/${req.files['vehicle_registration'][0].filename}` 
+            ? req.files['vehicle_registration'][0].path 
             : null;
+        
 
         // 👇 ĐÃ SỬA: Thêm status = 'pending' cho driver
         let initialStatus = 'active'; // Mặc định cho passenger
@@ -210,7 +214,7 @@ exports.updateProfile = async (req, res) => {
 
         let avatarUrl = user.avatar_url;
         if (req.file) {
-            avatarUrl = `/uploads/${req.file.filename}`;
+            avatarUrl = req.file.path;
         }
 
         const updateQuery = `
