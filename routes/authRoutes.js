@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
-const uploadCloud = require('../middlewares/uploadCloudinary'); 
+const uploadCloud = require('../middleware/uploadCloudinary'); 
 
 // 👇 QUAN TRỌNG: Phải có dấu { } để lấy hàm verifyToken ra từ object
-const { verifyToken } = require('../middlewares/authMiddleware'); 
+const { verifyToken } = require('../middleware/authMiddleware'); 
 
 // --- CÁC ROUTE ---
 
