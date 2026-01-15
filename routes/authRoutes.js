@@ -9,14 +9,22 @@ const { verifyToken } = require('../middleware/authMiddleware');
 // --- CÁC ROUTE ---
 
 // 1. Đăng ký (Dùng uploadCloud)
-router.post('/register', 
+router.post(
+  "/register",
+  (req, res, next) => {
+    if (!req.headers["content-type"]?.includes("multipart")) {
+      return next(); // ✅ passenger không upload ảnh
+    }
+
     uploadCloud.fields([
-        { name: 'avatar', maxCount: 1 }, 
-        { name: 'license', maxCount: 1 },
-        { name: 'vehicle_registration', maxCount: 1 }
-    ]), 
-    authController.register
+      { name: "avatar", maxCount: 1 },
+      { name: "license", maxCount: 1 },
+      { name: "vehicle_registration", maxCount: 1 },
+    ])(req, res, next);
+  },
+  authController.register
 );
+
 
 // 2. Đăng nhập
 router.post('/login', authController.login);
